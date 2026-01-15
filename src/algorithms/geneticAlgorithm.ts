@@ -1,18 +1,8 @@
-// src/algorithms/geneticAlgorithm.ts
-import {
-  DAYS,
-  PERIODS,
-  TEACHERS,
-  SUBJECTS,
-  ROOMS,
-  COURSES,
-} from "../data/timetableData";
+import { DAYS, PERIOD_TIMINGS } from "../data/timetableData";
 
-/**
- * Gene = one scheduled class (subject + teacher + room + day + period)
- */
+// -------------------- Types --------------------
 export interface Gene {
-  courseId: string;
+  courseId: string;  // branch ID
   subjectId: string;
   teacherId: string;
   roomId: string;
@@ -25,26 +15,54 @@ export interface Individual {
   fitness: number;
 }
 
-// helper randomizers
+export interface Teacher {
+  id: string;
+  name: string;
+  short?: string;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code?: string;
+  isLab?: boolean;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  type: "CLASS" | "LAB";
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+}
+
+// -------------------- Utility Helpers --------------------
 const rand = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 const randomInt = (max: number) => Math.floor(Math.random() * max);
 
-/**
- * Step 1 – Create a random schedule (initial population)
- */
-export function createRandomIndividual(): Individual {
+// -------------------- Create Random Individual --------------------
+export function createRandomIndividual(
+  teachers: Teacher[],
+  subjects: Subject[],
+  rooms: Room[],
+  branches: Branch[]
+): Individual {
   const genes: Gene[] = [];
 
-  for (const course of COURSES) {
-    for (const subject of SUBJECTS) {
-      const teacher = rand(TEACHERS);
+  for (const branch of branches) {
+    for (const subject of subjects) {
+      const teacher = rand(teachers);
       const room = subject.isLab
-        ? ROOMS.find((r) => r.type === "LAB")!
-        : ROOMS.find((r) => r.type === "CLASS")!;
+        ? rand(rooms.filter((r) => r.type === "LAB"))
+        : rand(rooms.filter((r) => r.type === "CLASS"));
       const day = rand(DAYS);
-      const period = randomInt(PERIODS);
+      const period = randomInt(PERIOD_TIMINGS.length);
+
       genes.push({
-        courseId: course.id,
+        courseId: branch.id,
         subjectId: subject.id,
         teacherId: teacher.id,
         roomId: room.id,
@@ -59,40 +77,32 @@ export function createRandomIndividual(): Individual {
   return individual;
 }
 
-/**
- * Step 2 – Fitness function (lower = better)
- */
+// -------------------- Fitness Function --------------------
 export function calculateFitness(ind: Individual): number {
   let penalty = 0;
 
-  // ---------------- HARD CONSTRAINTS ----------------
-  // (1) Teacher & room clashes – no teacher or room can repeat same time slot
+  // Penalize teacher or room clashes
   for (const day of DAYS) {
-    for (let p = 0; p < PERIODS; p++) {
-      const sameTime = ind.genes.filter(
-        (g) => g.day === day && g.period === p
-      );
+    for (let p = 0; p < PERIOD_TIMINGS.length; p++) {
+      const sameTime = ind.genes.filter((g) => g.day === day && g.period === p);
       const teacherSet = new Set<string>();
       const roomSet = new Set<string>();
 
       for (const g of sameTime) {
-        // teacher clash
-        if (teacherSet.has(g.teacherId)) penalty += 1000;
+        if (teacherSet.has(g.teacherId)) penalty += 1000; // teacher clash
         else teacherSet.add(g.teacherId);
 
-        // room clash
-        if (roomSet.has(g.roomId)) penalty += 800;
+        if (roomSet.has(g.roomId)) penalty += 800; // room clash
         else roomSet.add(g.roomId);
       }
     }
   }
 
-  // (2) Subject repetition – avoid same subject twice/day for a course
+  // Avoid repeating same subject twice per day for same branch
   const subjectsPerDay: Record<string, Record<string, string[]>> = {};
   for (const g of ind.genes) {
     subjectsPerDay[g.courseId] = subjectsPerDay[g.courseId] || {};
-    subjectsPerDay[g.courseId][g.day] =
-      subjectsPerDay[g.courseId][g.day] || [];
+    subjectsPerDay[g.courseId][g.day] = subjectsPerDay[g.courseId][g.day] || [];
     subjectsPerDay[g.courseId][g.day].push(g.subjectId);
   }
 
@@ -103,47 +113,24 @@ export function calculateFitness(ind: Individual): number {
     }
   }
 
-  // ---------------- SOFT CONSTRAINTS ----------------
-  // (3) Encourage variety — more unique subjects per course
-  for (const course of COURSES) {
-    const subjects = ind.genes
-      .filter((g) => g.courseId === course.id)
-      .map((g) => g.subjectId);
-    const unique = new Set(subjects).size;
-    const coverage = SUBJECTS.length - unique;
-    penalty += coverage * 10;
-  }
-
-  // (4) Labs should happen mid-day, not first/last period
-  for (const g of ind.genes) {
-    const subj = SUBJECTS.find((s) => s.id === g.subjectId);
-    if (subj?.isLab && (g.period === 0 || g.period >= PERIODS - 2)) {
-      penalty += 20; // early or late lab = slight penalty
-    }
-  }
-
   return penalty;
 }
 
-/**
- * Step 3 – Mutation (randomly shift class timing)
- */
+// -------------------- Mutation --------------------
 export function mutate(ind: Individual, rate = 0.1): Individual {
   const mutated = structuredClone(ind) as Individual;
   for (let i = 0; i < mutated.genes.length; i++) {
     if (Math.random() < rate) {
       const g = mutated.genes[i];
       g.day = rand(DAYS);
-      g.period = randomInt(PERIODS);
+      g.period = randomInt(PERIOD_TIMINGS.length);
     }
   }
   mutated.fitness = calculateFitness(mutated);
   return mutated;
 }
 
-/**
- * Step 4 – Crossover (mix genes from two parents)
- */
+// -------------------- Crossover --------------------
 export function crossover(a: Individual, b: Individual): Individual {
   const child: Individual = { genes: [], fitness: 0 };
   for (let i = 0; i < a.genes.length; i++) {
@@ -153,29 +140,38 @@ export function crossover(a: Individual, b: Individual): Individual {
   return child;
 }
 
-/**
- * Step 5 – Main GA loop
- */
+// -------------------- Run GA --------------------
 export function runGA(
-  popSize = 30,
-  generations = 100,
-  mutationRate = 0.1
-): Individual {
+teachers: Teacher[], subjects: Subject[], rooms: Room[], branches: Branch[], p0: never[], popSize = 30, generations = 100, mutationRate = 0.1): Individual {
+  if (
+    !teachers.length ||
+    !subjects.length ||
+    !rooms.length ||
+    !branches.length
+  ) {
+    throw new Error("⚠️ Not enough input data for GA!");
+  }
+
+  // Create initial population
   let population: Individual[] = Array.from({ length: popSize }, () =>
-    createRandomIndividual()
+    createRandomIndividual(teachers, subjects, rooms, branches)
   );
+
   population.sort((a, b) => a.fitness - b.fitness);
   let best = population[0];
 
+  // Evolve over generations
   for (let g = 0; g < generations; g++) {
     const nextGen: Individual[] = [];
+
     while (nextGen.length < popSize) {
-      const parent1 = population[Math.floor(Math.random() * popSize)];
-      const parent2 = population[Math.floor(Math.random() * popSize)];
+      const parent1 = rand(population);
+      const parent2 = rand(population);
       let child = crossover(parent1, parent2);
       child = mutate(child, mutationRate);
       nextGen.push(child);
     }
+
     population = nextGen.sort((a, b) => a.fitness - b.fitness);
     if (population[0].fitness < best.fitness) best = population[0];
   }

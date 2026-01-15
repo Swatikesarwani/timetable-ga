@@ -1,3 +1,109 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================= */
+/* 🖨️ A4 Print + PDF Timetable Style */
+/* ============================= */
+
+@page {
+  size: A4 portrait; /* change to landscape if you want wider layout */
+  margin: 10mm 10mm 10mm 10mm;
+}
+
+@media print {
+  html,
+  body {
+    height: 297mm;
+    width: 210mm;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: white !important;
+    color: black !important;
+    font-family: "Times New Roman", serif !important;
+  }
+
+  /* Hide non-print UI */
+  button,
+  select,
+  .no-print,
+  .print-hidden {
+    display: none !important;
+  }
+
+  /* Table styling */
+  table {
+    border-collapse: collapse !important;
+    width: 100%;
+    page-break-inside: avoid;
+    font-size: 11pt !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #000 !important;
+    padding: 6px !important;
+    vertical-align: middle !important;
+  }
+
+  th {
+    font-weight: 600 !important;
+    background-color: #f3f3f3 !important;
+  }
+
+  /* Header styling */
+  h1,
+  h2,
+  h3 {
+    text-align: center !important;
+    margin: 0;
+    padding: 2px 0;
+    font-weight: 700;
+  }
+
+  h1 {
+    font-size: 18pt !important;
+  }
+
+  h2 {
+    font-size: 14pt !important;
+  }
+
+  h3 {
+    font-size: 12pt !important;
+  }
+
+  /* Main timetable box */
+  .timetable-container {
+    border: 1px solid #000 !important;
+    padding: 12px !important;
+    margin: 0 auto;
+    width: 100%;
+    background-color: white !important;
+    page-break-after: avoid;
+  }
+
+  /* Footer grid (Teachers, Classrooms, Subjects) */
+  .timetable-container .grid {
+    margin-top: 10mm !important;
+  }
+
+  .timetable-container .grid > div {
+    border: none !important;
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+  }
+
+  .timetable-container p {
+    margin: 0 0 3px 0 !important;
+  }
+
+  /* Center & tighten page */
+  .print-page {
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+}
